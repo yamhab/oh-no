@@ -1,6 +1,23 @@
+import contextlib
 import dataclasses
 import enum
 import random
+
+import blessed
+import wcwidth
+
+MIN_WIDTH = 80
+MIN_HEIGHT = 24
+
+START_LOGO = """  ___   __        ____  _____         _
+ .'   `.[  |      |_   \\|_   _|       | |
+/  .-.  \\| |--.     |   \\ | |   .--.  | |
+| |   | || .-. |    | |\\ \\| | / .'`\\ \\| |
+\\  `-'  /| | | |   _| |_\\   |_| \\__. ||_|
+ `.___.'[___]|__] |_____|\\____|'.__.' (_)"""
+
+MIN_PLAYERS = 2
+MAX_PLAYERS = 8
 
 
 class Color(enum.IntEnum):
@@ -10,20 +27,20 @@ class Color(enum.IntEnum):
     BLUE = enum.auto()
     WILD = enum.auto()
 
-    def __str__(self) -> str:
-        color = ""
+    def render(self, term: blessed.Terminal) -> str:
+        rendered = ""
         match self:
             case self.RED:
-                color = "RED"
+                rendered = term.red_reverse + "RED"
             case self.YELLOW:
-                color = "YELLOW"
+                rendered = term.yellow_reverse + "YELLOW"
             case self.GREEN:
-                color = "GREEN"
+                rendered = term.green_reverse + "GREEN"
             case self.BLUE:
-                color = "BLUE"
+                rendered = term.blue_reverse + "BLUE"
             case self.WILD:
-                color = "WILD"
-        return color
+                rendered = term.magenta_reverse + "WILD"
+        return rendered
 
 
 class Type(enum.IntEnum):
@@ -34,8 +51,8 @@ class Type(enum.IntEnum):
     WILD = enum.auto()
     WILD_DRAW_FOUR = enum.auto()
 
-    def __str__(self) -> str:
-        type = ""
+    def render(self) -> str:
+        rendered = ""
         match self:
             case self.SKIP:
                 return "SKIP"
@@ -45,7 +62,7 @@ class Type(enum.IntEnum):
                 return "DRAW TWO"
             case self.WILD_DRAW_FOUR:
                 return "DRAW FOUR"
-        return type
+        return rendered
 
 
 @dataclasses.dataclass(order=True)
@@ -54,13 +71,12 @@ class Card:
     type: Type
     number: int | None = None
 
-    def __str__(self) -> str:
+    def render(self, term: blessed.Terminal) -> str:
         if self.type == Type.NUMBER:
-            return f"{self.color} {self.number}"
-        elif self.type == Type.WILD:
-            return f"{self.color}"
-        else:
-            return f"{self.color} {self.type}"
+            return self.color.render(term) + " " + str(self.number) + term.normal
+        if self.type == Type.WILD:
+            return self.color.render(term) + term.normal
+        return self.color.render(term) + " " + self.type.render() + term.normal
 
     def playable(self, last: Card) -> bool:
         return (
@@ -73,6 +89,7 @@ class Card:
 
 @dataclasses.dataclass
 class Game:
+    term: blessed.Terminal
     num: int = 0
     current: int = 0
     direction: int = 1
@@ -82,13 +99,59 @@ class Game:
     skip: bool = False
     draw: int = 0
 
-    def __post_init__(self) -> None:
-        while self.num < 2:
-            try:
-                self.num = int(input("Welcome to Oh No! How many people will be playing? "))
-            except ValueError:
-                pass
+    def play(self) -> None:
+        if self.term.width < MIN_WIDTH or self.term.height < MIN_HEIGHT:
+            print(
+                f"Minimum terminal dimensions: {MIN_WIDTH}x{MIN_HEIGHT}\nCurrent terminal \
+dimensions: {self.term.width}x{self.term.height}",
+            )
+            return
 
+        with self.term.fullscreen():
+            self.setup_players()
+            self.setup_cards()
+
+            for _ in range(self.num):
+                print(self.term.clear() + self.term.center("~~~ PLAYER 1's TURN ~~~"))
+                self.print_hand()
+                self.choose_card()
+                self.card_action()
+                with self.term.cbreak(), self.term.hidden_cursor():
+                    print("Press any key to continue... ")
+                    self.term.inkey()
+
+                while len(self.hands[self.current]) != 0:
+                    self.turn()
+                    with self.term.cbreak(), self.term.hidden_cursor():
+                        print("Press any key to continue... ")
+                        self.term.inkey()
+
+                print(f"{self.term.clear()}Player {self.current + 1} wins!")
+
+    def setup_players(self) -> None:
+        print(self.term.clear() + "\n")
+        for line in START_LOGO.splitlines():
+            print(self.term.center(line))
+        print("\n" + self.term.center("Welcome to Oh No! How many people will be playing (2-8)?"))
+
+        while self.num < MIN_PLAYERS or self.num > MAX_PLAYERS:
+            with contextlib.suppress(ValueError):
+                self.num = int(self.center_input("> "))
+            print(
+                self.term.move_x(0) + self.term.move_up() + self.term.clear_eol(),
+                end="",
+            )
+
+    def center_input(self, prompt: str) -> str:
+        if prompt.isascii() and prompt.isprintable():
+            text_width = len(prompt)
+        else:
+            text_width = wcwidth.width(prompt, control_codes="ignore")
+        total_padding = max(0, self.term.width - text_width)
+        left_pad = total_padding // 2 + (total_padding & self.term.width & 1) - 1
+        return input(" " * left_pad + prompt)
+
+    def setup_cards(self) -> None:
         for color in [Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE]:
             self.deck.append(Card(color, Type.NUMBER, 0))
             for number in range(1, 10):
@@ -105,43 +168,34 @@ class Game:
             del self.deck[-7:]
             self.hands[hand].sort()
 
-    def play(self) -> None:
-        print("\n~~~ PLAYER 1's TURN ~~~")
-        self.print_hand()
-        self.choose_card()
-        self.card_action()
-
-        while len(self.hands[self.current]) != 0:
-            self.turn()
-
-        print(f"\nPlayer {self.current + 1} wins!")
-
     def print_hand(self, playable: list[int] | None = None) -> None:
         print("Here are the cards in your hand:")
         for i, card in enumerate(self.hands[self.current]):
-            print(f"{i + 1}: {card}")
+            print(f"{i + 1}: {card.render(self.term)}")
         if playable:
-            print(f"""The last played card on the stack is a {self.stack[-1]}. You may play one of \
-the following cards from your hand:""")
+            print(f"""The last played card on the stack is a {self.stack[-1].render(self.term)}. \
+You may play one of the following cards from your hand:""")
             for i, card in enumerate(playable):
                 if i < len(playable) - 1:
-                    print(f"{card + 1}", end=", ")
+                    print(card + 1, end=", ")
                 else:
-                    print(f"{card + 1}")
+                    print(card + 1)
 
     def choose_card(self, playable: list[int] | None = None) -> None:
         while True:
-            try:
+            with contextlib.suppress(ValueError, IndexError):
                 choice = int(input("Which card would you like to play? ")) - 1
                 if not playable or choice in playable:
                     self.play_card(self.current, choice)
                     break
-            except ValueError, IndexError:
-                pass
+            print(
+                self.term.move_x(0) + self.term.move_up() + self.term.clear_eol(),
+                end="",
+            )
 
     def play_card(self, hand: int, choice: int) -> None:
         self.stack.append(self.hands[hand][choice])
-        print(f"You play a {self.hands[hand][choice]}")
+        print("You play a " + self.hands[hand][choice].render(self.term))
         del self.hands[hand][choice]
 
     def card_action(self) -> None:
@@ -177,11 +231,14 @@ the following cards from your hand:""")
                     self.stack[-1].color = Color.BLUE
                     break
                 case _:
-                    continue
+                    print(
+                        self.term.move_x(0) + self.term.move_up() + self.term.clear_eol(),
+                        end="",
+                    )
 
     def turn(self) -> None:
         self.rotate()
-        print(f"\n~~~ PLAYER {self.current + 1}'s TURN ~~~")
+        print(self.term.clear() + self.term.center(f"~~~ PLAYER {self.current + 1}'s TURN ~~~"))
 
         for _ in range(self.draw):
             self.draw_card()
@@ -219,7 +276,7 @@ the following cards from your hand:""")
 
     def draw_card(self) -> None:
         card = self.deck.pop()
-        print(f"You draw a {card} from the deck")
+        print(f"You draw a {card.render(self.term)} from the deck")
         self.hands[self.current].append(card)
         self.hands[self.current].sort()
 
@@ -232,7 +289,8 @@ the following cards from your hand:""")
 
 
 def main() -> None:
-    game = Game()
+    term = blessed.Terminal()
+    game = Game(term)
     game.play()
 
 

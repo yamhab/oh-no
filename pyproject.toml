@@ -5,6 +5,7 @@ description = "UNO in the terminal"
 readme = "README.md"
 requires-python = ">=3.14"
 license-files = ["LICENSE.md"]
+dependencies = ["blessed>=1.33.0", "wcwidth>=0.6"]
 
 [project.scripts]
 oh-no = "oh_no.__main__:main"
