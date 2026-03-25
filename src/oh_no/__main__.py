@@ -155,12 +155,12 @@ dimensions: {self.term.width}x{self.term.height}",
         for color in [Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE]:
             self.deck.append(Card(color, Type.NUMBER, 0))
             for number in range(1, 10):
-                self.deck.extend([Card(color, Type.NUMBER, number)] * 2)
-            self.deck.extend([Card(color, Type.SKIP)] * 2)
-            self.deck.extend([Card(color, Type.REVERSE)] * 2)
-            self.deck.extend([Card(color, Type.DRAW_TWO)] * 2)
-        self.deck.extend([Card(Color.WILD, Type.WILD)] * 4)
-        self.deck.extend([Card(Color.WILD, Type.WILD_DRAW_FOUR)] * 4)
+                self.deck.extend(Card(color, Type.NUMBER, number) for _ in range(2))
+            self.deck.extend(Card(color, Type.SKIP) for _ in range(2))
+            self.deck.extend(Card(color, Type.REVERSE) for _ in range(2))
+            self.deck.extend(Card(color, Type.DRAW_TWO) for _ in range(2))
+        self.deck.extend(Card(Color.WILD, Type.WILD) for _ in range(4))
+        self.deck.extend(Card(Color.WILD, Type.WILD_DRAW_FOUR) for _ in range(4))
         random.shuffle(self.deck)
 
         for hand in range(self.num):
