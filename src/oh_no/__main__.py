@@ -284,6 +284,11 @@ dimensions: {self.term.width}x{self.term.height}",
             self.current %= self.num
 
     def draw_card(self) -> None:
+        if len(self.deck) == 0:
+            self.deck = self.stack.copy()
+            self.stack.clear()
+            self.deck.sort()
+
         card = self.deck.pop()
         print(f"You draw a {card.render(self.term)} from the deck")
         self.hands[self.current].append(card)
