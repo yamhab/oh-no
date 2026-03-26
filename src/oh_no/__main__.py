@@ -132,7 +132,8 @@ dimensions: {self.term.width}x{self.term.height}",
         print(self.term.clear() + "\n")
         for line in START_LOGO.splitlines():
             print(self.term.center(line))
-        print("\n" + self.term.center("Welcome to Oh No! How many people will be playing (2-8)?"))
+        print("\n" + self.term.center("Press CTRL-C to exit at any time"))
+        print(self.term.center("Welcome to Oh No! How many people will be playing (2-8)?"))
 
         while self.num < MIN_PLAYERS or self.num > MAX_PLAYERS:
             with contextlib.suppress(ValueError):
@@ -172,9 +173,10 @@ dimensions: {self.term.width}x{self.term.height}",
         print("Here are the cards in your hand:")
         for i, card in enumerate(self.hands[self.current]):
             print(f"{i + 1}: {card.render(self.term)}")
+        if len(self.stack) != 0:
+            print(f"The last played card on the stack was a {self.stack[-1].render(self.term)}.")
         if playable:
-            print(f"""The last played card on the stack is a {self.stack[-1].render(self.term)}. \
-You may play one of the following cards from your hand:""")
+            print("You may play one of the following cards from your hand:")
             for i, card in enumerate(playable):
                 if i < len(playable) - 1:
                     print(card + 1, end=", ")
@@ -186,17 +188,17 @@ You may play one of the following cards from your hand:""")
             with contextlib.suppress(ValueError, IndexError):
                 choice = int(input("Which card would you like to play? ")) - 1
                 if not playable or choice in playable:
-                    self.play_card(self.current, choice)
+                    self.play_card(choice)
                     break
             print(
                 self.term.move_x(0) + self.term.move_up() + self.term.clear_eol(),
                 end="",
             )
 
-    def play_card(self, hand: int, choice: int) -> None:
-        self.stack.append(self.hands[hand][choice])
-        print("You play a " + self.hands[hand][choice].render(self.term))
-        del self.hands[hand][choice]
+    def play_card(self, choice: int) -> None:
+        self.stack.append(self.hands[self.current][choice])
+        print("You play a " + self.hands[self.current][choice].render(self.term))
+        del self.hands[self.current][choice]
 
     def card_action(self) -> None:
         last = self.stack[-1]
@@ -245,6 +247,7 @@ You may play one of the following cards from your hand:""")
         self.draw = 0
 
         if self.skip:
+            self.print_hand()
             print("Turn skipped")
             self.skip = False
             return
@@ -252,13 +255,15 @@ You may play one of the following cards from your hand:""")
         playable = self.playable_cards()
         card_played = False
         if len(playable) == 0:
-            print("You have no cards to play")
+            print("You have no valid cards to play")
             self.draw_card()
             playable = self.playable_cards()
-            if (playable) == 1:
+            if len(playable) == 1:
                 self.print_hand(playable)
                 self.choose_card(playable)
                 card_played = True
+            else:
+                self.print_hand()
         else:
             self.print_hand(playable)
             self.choose_card(playable)
