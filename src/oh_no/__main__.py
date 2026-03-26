@@ -19,6 +19,8 @@ START_LOGO = """  ___   __        ____  _____         _
 MIN_PLAYERS = 2
 MAX_PLAYERS = 8
 
+HAND_CARDS = 7
+
 
 class Color(enum.IntEnum):
     RED = enum.auto()
@@ -165,8 +167,8 @@ dimensions: {self.term.width}x{self.term.height}",
         random.shuffle(self.deck)
 
         for hand in range(self.num):
-            self.hands.append(self.deck[-7:])
-            del self.deck[-7:]
+            self.hands.append(self.deck[-HAND_CARDS:])
+            del self.deck[-HAND_CARDS:]
             self.hands[hand].sort()
 
     def print_hand(self, playable: list[int] | None = None) -> None:
@@ -189,6 +191,8 @@ dimensions: {self.term.width}x{self.term.height}",
                 choice = int(input("Which card would you like to play? ")) - 1
                 if not playable or choice in playable:
                     self.play_card(choice)
+                    if len(self.hands[self.current]) == 1:
+                        print("Oh No!")
                     break
             print(
                 self.term.move_x(0) + self.term.move_up() + self.term.clear_eol(),
