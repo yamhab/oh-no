@@ -2,3 +2,4 @@ line-length = 100
 
 [lint]
 select = ["ALL"]
+ignore = ["T201"]
